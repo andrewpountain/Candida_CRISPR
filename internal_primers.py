@@ -15,7 +15,7 @@ Inputs:
 sequences_fasta: fasta file (can be gzipped) containing sequences to be used as templates
 config_file: file containing tab-separated key-value pairs with settings for global input tags
 gff_file: file in gff format used to build exon structures of genes (the script is designed to look for only exonic binding sites)
-number_primers: optional, defaults to 0, integer giving the number of primers to return
+number_primers: optional, defaults to 1, integer giving the number of primers to return
 
 Outputs:
 To stdout, a tab-separated table with the following fields (where multiple primers are returned, fields are comma-separated lists):
@@ -36,9 +36,9 @@ To stdout, a tab-separated table with the following fields (where multiple prime
     15. hairpin_th_right: Tendency of reverse primer(s) to form a hairpin (see http://primer3.org/manual.html#PRIMER_MAX_HAIRPIN_TH)
     16. other_allele: True/False for whether both alleles* can serve as a template for PCR
     17. fail: If primer design failes, this has a message saying this, otherwise "None"
-    
-*Note that in Assembly 22 of the Candida albicans SC5314 genome, there are two alleles for each coding sequence, 
-denoted with suffixes "_A" and _B".    
+
+*Note that in Assembly 22 of the Candida albicans SC5314 genome, there are two alleles for each coding sequence,
+denoted with suffixes "_A" and _B".
 
 """
 import primer3
@@ -53,21 +53,31 @@ class Primer:
     Class of objects representing individual primers
     """
     def __init__(self, sequence, TM, GC_percent, any_th, end_th, hairpin_th, direction):
-        self.sequence = sequence
-        self.TM = TM
-        self.GC_percent = GC_percent
-        self.any_th = any_th
-        self.end_th = end_th
-        self.hairpin_th = hairpin_th
-        if direction in ["left","right"]:
-            self.direction = direction
+        self.sequence = sequence  # DNA sequence of the primer
+        self.TM = TM  # Melting temperature of the primer
+        self.GC_percent = GC_percent  # Percentage GC of the primer
+        self.any_th = any_th  # Tendency of primer to bind to itself
+        self.end_th = end_th  # Tendency of primer to bind to itself at the 3' end
+        self.hairpin_th = hairpin_th  # Tendency of primer to form a hairpin
+        if direction in ["left", "right"]:
+            self.direction = direction  # Direction of primer as either left (forward) or right (reverse)
         else:
             raise ValueError("Primer direction must be either left or right.")
 
     def __len__(self):
+        """
+        Returns length of the primer.
+        :return: Integer
+        """
         return len(self.sequence)
 
     def find_start(self, template):
+        """
+        Finds the start position of the primer on the template, sensitive to whether it is a left (forward) or
+         right (reverse) primer (returns None if no binding site).
+        :param template: Template DNA sequence
+        :return: Integer
+        """
         if getattr(self, "direction") == "left":
             position = template.find(self.sequence)
             return position + 1 if position != -1 else None
@@ -83,10 +93,11 @@ class PrimerPair:
         assert isinstance(left, Primer)
         assert isinstance(right, Primer)
         if getattr(left, "direction") == getattr(right, "direction"):
+            # Check that your primers are not in the same orientation
             raise ValueError("Primers in a primer pair cannot be in the same orientation.")
-        self.left = left
-        self.right = right
-        self.product_size = int(product_size)
+        self.left = left  # Sets left attribute as the left (forward) primer
+        self.right = right  # Sets right attribute as the right (reverse) primer
+        self.product_size = int(product_size)  # The size of the product produced by the pair, as an integer.
 
     def get_coords(self, template):
         """
@@ -96,15 +107,21 @@ class PrimerPair:
         return self.left.find_start(template), self.right.find_start(template)
 
     def get_left(self):
+        """
+        :return: Left primer object
+        """
         return self.left
 
     def get_right(self):
+        """
+        :return: Right primer object
+        """
         return self.right
 
     def is_template(self, template):
         """
         Determines if a template matches or not.
-        :param template: Input sequence
+        :param template: Input DNA sequence
         :return: True if there is a match, False if not.
         """
         coords = self.get_coords(template)
@@ -117,18 +134,21 @@ class GeneStructure:
     Exons are defined as a tuple of coordinates relative to gene position.
     """
     def __init__(self, gene_id, start, end, sense):
-        self.gene_id = gene_id
-        self.start = int(start)
-        self.end = int(end)
-        self.sense = sense
-        self.exons = []
+        self.gene_id = gene_id  # Gene ID
+        self.start = int(start)  # Start coordinate of the gene
+        self.end = int(end)  # End coordinate of the gene
+        self.sense = sense  # Sense of the gene (+ or -)
+        self.exons = []  # Initializes a list that exon coordinates are entered into
 
     def get_exons(self):
+        """
+        :return: List of exon coordinates
+        """
         return self.exons
 
     def add_exon(self, exon_start, exon_end):
         """
-        Produces an exon when supplied with the exon start and end position within the chromosome
+        Produces an exon when supplied with the exon start and end position within the chromosome.
         :param exon_start: start position within the chromosome
         :param exon_end: end position within the chromosome
         :return: Adds an exon to self.exons, a tuple containing the start position within the gene and the length.
@@ -152,15 +172,29 @@ class GeneStructure:
         return [exon + exon for exon in self.exons]
 
     def __str__(self):
+        """
+        :return: Print string for the GeneStructure instance
+        """
         return "%s: %s-%s %s, exons:%s" % (self.gene_id, self.start, self.end, self.sense, ",".join(str(exon) for exon in self.exons))
 
 
 def revcomp(x):
+    """
+    Reverse-complements input sequence (note: cannot handle non-ATCG bases and will throw a KeyError).
+    :param x: Input DNA sequence
+    :return: Reverse-complemented input sequence
+    """
     revdict = {"A": "T", "T": "A", "C": "G", "G": "C", "a": "t", "t": "a", "c": "g", "g": "c"}
     return "".join([revdict[i] for i in x[::-1]])
 
 
 def import_config(file_name):
+    """
+    Parses config file.
+    :param file_name: Tab-separated config file name containing key-value pairs specifying
+    global input tags as described (http://primer3.org/manual.html)
+    :return: Dict object with key-value pairs of tags and values
+    """
     return_dict = {}
     with open(file_name, "r") as file:
         for line in file.readlines():
@@ -193,7 +227,7 @@ def find_primers(sequence_id, sequence_template, global_args, gene_coords_dict):
     try:
         primer3_result = primer3.bindings.designPrimers(seq_args, global_args)
         return True, primer3_result
-    except OSError as e:
+    except OSError as e:  # This is the context in which no primers are found
         return False, "Primer design failed for gene %s. %s." % (sequence_id, str(e))
 
 
@@ -233,7 +267,14 @@ def parse_primers(primer3_result, number_primers):
     return pair_list
 
 
-def get_gene_structures(gff_file, info_tag = "ID", transcript_suffix = "-T"):
+def get_gene_structures(gff_file, info_tag="ID", transcript_suffix="-T"):
+    """
+    Parse the supplied gff file
+    :param gff_file: gene annotation in gff format
+    :param info_tag: tag in the info field used to give gene ID
+    :param transcript_suffix: the suffix to be stripped from the end of the gene ID field as specified by info_tag
+    :return: a dictionary with gene IDs as keys and GeneStructure objects as values
+    """
 
     gene_str_dict = {}
     file = gzip.open(gff_file, "r") if gff_file.endswith('.gz') else open(gff_file)
@@ -277,7 +318,8 @@ def hits_both_alleles(primer_pair, gene, sequence_dict):
     elif gene.endswith("_B"):
         other_allele = re.sub("_B$", "_A", gene)
     else:
-        return True
+        return True  # There is a subset of genes that do not have "_A" or "_B" suffixes that
+        # do not have alleles (e.g. mitochondrial genes)
     if other_allele in sequence_dict:
         return True if primer_pair.is_template(sequence_dict[other_allele]) else False
     else:
@@ -291,10 +333,10 @@ if __name__ == "__main__":
     if len(sys.argv) > 4:
         number_primers = int(sys.argv[4])
     else:
-        number_primers = 1
+        number_primers = 1  # I.e. if you don't specify, only one primer returned.
 
     # Import arguments from the config file
-    global_args = import_config("/Users/andrewpountain/Documents/Lorenz_Postdoc/Knockout_library_generation/primer_design.config")
+    global_args = import_config(config_file)
 
     # Build gene exon coordinates dictionary
     gene_coords_dict = get_gene_structures(gff_file)
@@ -307,7 +349,7 @@ if __name__ == "__main__":
                  "TM_left\tTM_right\tGC_percent_left\tGC_percent_right\tany_th_left\tany_th_right\t" \
                  "end_th_left\tend_th_right\thairpin_th_left\thairpin_th_right\tother_allele\tfail"
 
-    # Start looping through the fasta file, creating a sequence dict retaining the original order.
+    # Start looping through the fasta file, creating a dict (keys: gene IDs, values: sequences)
     file = gzip.open(sequences_file, "r") if sequences_file.endswith('.gz') else open(sequences_file)
     sequence = ''
     gene = None
@@ -321,6 +363,7 @@ if __name__ == "__main__":
         else:
             sequence += line.decode("utf-8").rstrip()
     sequence_dict[gene] = sequence
+    file.close()
 
     # Start looping through the sequence dict, performing primer3 as you go.
     print(first_line)
@@ -344,6 +387,7 @@ if __name__ == "__main__":
             print_line.append(",".join(str(getattr(pair, "product_size")) for pair in primer_pairs))
             # Product coordinates within the gene
             print_line.append(",".join("-".join(str(coord) for coord in pair.get_coords(sequence)) for pair in primer_pairs))
+            # Now add each field to the line in turn as a comma separated list for each primer pair
             for field in ["sequence", "TM", "GC_percent", "any_th", "end_th", "hairpin_th"]: # The primer-specific attributes you need
                 print_line.append(",".join(str(getattr(pair.get_left(), field)) for pair in primer_pairs)) # Left primer attribute
                 print_line.append(",".join(str(getattr(pair.get_right(), field)) for pair in primer_pairs)) # Right primer attribute
