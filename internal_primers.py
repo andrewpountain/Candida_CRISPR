@@ -14,8 +14,31 @@ Run: python3 internal_primers.py <sequences_fasta> <config_file> <gff_file> <num
 Inputs:
 sequences_fasta: fasta file (can be gzipped) containing sequences to be used as templates
 config_file: file containing tab-separated key-value pairs with settings for global input tags
-gff_file: file in gff format used to build exon structures of genes
+gff_file: file in gff format used to build exon structures of genes (the script is designed to look for only exonic binding sites)
 number_primers: optional, defaults to 0, integer giving the number of primers to return
+
+Outputs:
+To stdout, a tab-separated table with the following fields (where multiple primers are returned, fields are comma-separated lists):
+    1. gene: gene ID
+    2. product_size: size of PCR amplicon(s)
+    3. product_coordinates: hyphen-separated coordinates of PCR amplicon(s)
+    4. sequence_left: DNA sequence of the forward primer(s)
+    5. sequence_right: DNA sequence of the reverse primer(s)
+    6. TM_left: Melting temperature of the forward primer(s)
+    7. TM_right: Melting temperature of the reverse primer(s)
+    8. GC_percent_left: GC percentage of the forward primer(s)
+    9. GC_percent_right: GC percentage of the reverse primer(s)
+    10. any_th_left: Tendency of forward primer(s) to bind to itself (see http://primer3.org/manual.html#PRIMER_MAX_SELF_ANY_TH)
+    11. any_th_right: Tendency of reverse primer(s) to bind to itself (see http://primer3.org/manual.html#PRIMER_MAX_SELF_ANY_TH)
+    12. end_th_left: Tendency of forward primer(s) to bind to itself at 3' end (see http://primer3.org/manual.html#PRIMER_MAX_SELF_END_TH)
+    13. end_th_right: Tendency of reverse primer(s) to bind to itself at 3' end (see http://primer3.org/manual.html#PRIMER_MAX_SELF_END_TH)
+    14. hairpin_th_left: Tendency of forward primer(s) to form a hairpin (see http://primer3.org/manual.html#PRIMER_MAX_HAIRPIN_TH)
+    15. hairpin_th_right: Tendency of reverse primer(s) to form a hairpin (see http://primer3.org/manual.html#PRIMER_MAX_HAIRPIN_TH)
+    16. other_allele: True/False for whether both alleles* can serve as a template for PCR
+    17. fail: If primer design failes, this has a message saying this, otherwise "None"
+    
+*Note that in Assembly 22 of the Candida albicans SC5314 genome, there are two alleles for each coding sequence, 
+denoted with suffixes "_A" and _B".    
 
 """
 import primer3
